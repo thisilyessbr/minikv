@@ -2,12 +2,12 @@ package com.minikv;
 
 import java.io.*;
 import java.net.*;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 public class ThreadedKVServer {
     public static void main(String[] args) throws IOException {
-        Map<String, String> store = new HashMap<>();
+        Map<String, String> store = new ConcurrentHashMap<>();
 
         ServerSocket serverSocket = new ServerSocket(6381);
         System.out.println("Server started, waiting for connections...");
