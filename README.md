@@ -95,12 +95,52 @@ GET mykey
 hello world
 ```
 
-## 🧪 Benchmarking
+## 🧪 Benchmarking with StressTest
 
-Run the stress test to evaluate performance:
+The included [`StressTest.java`](src/main/java/com/minikv/StressTest.java) utility benchmarks server performance under load by running a coordinated write-then-verify test:
+
+### Test Configuration
+- **Threads:** 20 concurrent client threads
+- **Operations per thread:** 2000 `SET` commands
+- **Total operations:** ~40,000 writes (20 threads × 2000 ops)
+
+### How It Works
+1. All 20 threads start simultaneously and execute their SET operations
+2. After all writes complete, a verification phase reads back every key
+3. The test reports: OK count, MISSING keys, and CORRUPTED data
+
+### Running the Stress Test
 ```bash
+# Build the project first
+mvn clean package
+
+# Run the stress test
 java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.StressTest
 ```
+
+**Expected output:**
+```
+Firing 20 threads x 2000 SETs...
+All writes done. Verifying...
+Total keys written: 40000
+OK:        40000
+MISSING:   0
+CORRUPTED: 0
+```
+
+### Evaluating Server Implementations
+- **PooledKVServer** - Should complete in ~1 second with zero missing/corrupted data
+- **ThreadedKVServer** - May complete slower due to thread creation overhead (~2-3 seconds)
+- **KVServer (single-threaded)** - Will be very slow as only one client can execute at a time
+
+### Interpreting Results
+| Result | Meaning |
+|--------|---------|
+| `OK: 40000` | All operations succeeded |
+| `MISSING: X` | Concurrent writes lost data (likely due to non-thread-safe HashMap in basic implementations) |
+| `CORRUPTED: X` | Some keys stored with wrong values |
+
+This test demonstrates the importance of proper thread safety and concurrent access handling in KV server implementations.
 
 ## 🔑 Key Learnings
 
