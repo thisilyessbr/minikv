@@ -2,28 +2,28 @@ package com.minikv;
 
 import java.io.*;
 import java.net.*;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PooledKVServer {
 
-  public static void main(String[] args) throws IOException {
-    Map<String, String> store = new HashMap<>();
+    public static void main(String[] args) throws IOException {
+        Map<String, String> store = new ConcurrentHashMap<>();
 
-    ExecutorService pool = Executors.newFixedThreadPool(10);
-    ServerSocket serverSocket = new ServerSocket(6381);
-    System.out.println("Server started, waiting for connections...");
+        ExecutorService pool = Executors.newFixedThreadPool(10);
+        ServerSocket serverSocket = new ServerSocket(6381);
+        System.out.println("Server started, waiting for connections...");
 
         while (true) {
             Socket client = serverSocket.accept();
             System.out.println("New client connected: " + client.getInetAddress());
             pool.submit(() -> handleClient(client, store));
         }
+    }
 
-  }
-  private static void handleClient(Socket client, Map<String, String> store) {
+    private static void handleClient(Socket client, Map<String, String> store) {
         try {
             BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
             PrintWriter out = new PrintWriter(client.getOutputStream(), true);
@@ -46,10 +46,10 @@ public class PooledKVServer {
         } catch (IOException e) {
             System.out.println("Client disconnected or error: " + e.getMessage());
         } finally {
-            try { client.close(); } catch (IOException ignored) {}
+            try {
+                client.close();
+            } catch (IOException ignored) {
+            }
         }
     }
-
-
-
 }

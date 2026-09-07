@@ -1,156 +1,89 @@
-# MiniKV - Java Key-Value Server
+# MiniKV
 
-**MiniKV** is a collection of Java implementations for a distributed Key-Value (KV) server, demonstrating different approaches to concurrent connection handling.
+MiniKV is an educational, in-memory key-value server written in Java 17. It explores how a TCP server changes as connection handling moves from one client at a time to one thread per client and then to a fixed worker pool.
 
-## 🚀 What is This Project?
+It is a single-process learning project. It does not implement persistence, replication, authentication, clustering, or the complete Redis protocol.
 
-This project explores various networking and concurrency patterns in Java by implementing multiple versions of a simple Key-Value store server that listens on port **6381**. The core functionality allows clients to:
-- `SET <key> <value>` - Store a value for a given key
-- `GET <key>` - Retrieve the value stored under a key (returns "NULL" or "(nil)" if not found)
+## Implementations
 
-## 📦 Project Structure
+| Class | Connection model | Shared store | Purpose |
+| --- | --- | --- | --- |
+| `EchoServer` | Single client loop | None | Socket I/O baseline |
+| `KVServer` | Single-threaded | `HashMap` | Sequential SET/GET server |
+| `ThreadedKVServer` | One thread per client | `ConcurrentHashMap` | Demonstrates concurrent clients and unbounded thread creation |
+| `PooledKVServer` | Fixed pool of 10 workers | `ConcurrentHashMap` | Bounds worker creation while keeping shared access thread-safe |
+| `StressTest` | 20 client threads | N/A | Writes and verifies 40,000 unique keys |
 
-```
-src/main/java/com/minikv/
-├── EchoServer.java      # Basic echo server (baseline implementation)
-├── KVServer.java        # Single-threaded KV server with HashMap storage
-├── ThreadedKVServer.java # Creates new thread per client connection
-├── PooledKVServer.java  # Uses fixed thread pool for connections
-└── StressTest.java      # Load testing utility
-```
+All servers listen on TCP port `6381`.
 
-## 🔍 Implementation Overview
+## Protocol
 
-### 1. EchoServer.java
-A simple echo server that demonstrates basic socket I/O handling. Every received message is echoed back to the client.
+Commands are newline-delimited text:
 
-### 2. KVServer.java
-The basic Key-Value implementation using a `HashMap` for storage. **Limitation:** Single-threaded - only one client can connect at a time.
+| Command | Example | Response |
+| --- | --- | --- |
+| SET | `SET language Java` | `OK` |
+| GET | `GET language` | `Java` or `(nil)` |
+| Invalid input | `DELETE language` | `ERROR: ...` |
 
-### 3. ThreadedKVServer.java
-Improves concurrency by creating a new thread (`Thread`) for each incoming client connection. Allows multiple simultaneous clients but creates a new thread per connection (can lead to resource exhaustion under high load).
+Values can contain spaces because the command parser splits each line into at most three parts.
 
-### 4. PooledKVServer.java
-The production-ready implementation using `ExecutorService` with a fixed thread pool (10 threads). Submitting tasks to the pool avoids creating excessive threads and provides better resource management.
+## Build
 
-### 5. StressTest.java
-A stress testing utility to benchmark server performance under load by sending concurrent requests.
+Requirements: JDK 17 and Maven.
 
-## 📋 Protocol Format
-
-Clients connect via TCP to port **6381** and send commands:
-
-| Command | Format        | Response     |
-|---------|---------------|--------------|
-| SET     | `SET key value` | `OK`         |
-| GET     | `GET key`      | `value` or `(nil)`/`NULL` |
-| Invalid | Any other     | `ERROR: ...` |
-
-## 🏃‍♂️ How to Run
-
-### Build the Project
 ```bash
 mvn clean package
 ```
 
-### Run Individual Servers
+Maven creates `target/minikv.jar`.
 
-**EchoServer:**
+## Run a server
+
+Start the pooled implementation:
+
 ```bash
-java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.EchoServer
+java -cp target/minikv.jar com.minikv.PooledKVServer
 ```
 
-**Basic KVServer:**
-```bash
-java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.KVServer
-```
+Replace the class name with `KVServer`, `ThreadedKVServer`, or `EchoServer` to compare connection models.
 
-**Threaded KVServer:**
-```bash
-java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.ThreadedKVServer
-```
-
-**Pooled KVServer (Recommended):**
-```bash
-java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.PooledKVServer
-```
-
-### Using a Client
-
-You can use `telnet` or `nc` to connect:
+Connect from another terminal:
 
 ```bash
-# Connect to the server
-telnet localhost 6381
-
-# Or using netcat
 nc localhost 6381
 ```
 
 Example session:
-```
-SET mykey hello world
+
+```text
+SET greeting hello world
 OK
-GET mykey
+GET greeting
 hello world
+GET missing
+(nil)
 ```
 
-## 🧪 Benchmarking with StressTest
+## Run the stress test
 
-The included [`StressTest.java`](src/main/java/com/minikv/StressTest.java) utility benchmarks server performance under load by running a coordinated write-then-verify test:
+Keep one server running, then execute:
 
-### Test Configuration
-- **Threads:** 20 concurrent client threads
-- **Operations per thread:** 2000 `SET` commands
-- **Total operations:** ~40,000 writes (20 threads × 2000 ops)
-
-### How It Works
-1. All 20 threads start simultaneously and execute their SET operations
-2. After all writes complete, a verification phase reads back every key
-3. The test reports: OK count, MISSING keys, and CORRUPTED data
-
-### Running the Stress Test
 ```bash
-# Build the project first
-mvn clean package
-
-# Run the stress test
-java -cp target/minikv-1.0-SNAPSHOT.jar com.minikv.StressTest
+java -cp target/minikv.jar com.minikv.StressTest
 ```
 
-**Expected output:**
-```
-Firing 20 threads x 2000 SETs...
-All writes done. Verifying...
-Total keys written: 40000
-OK:        40000
-MISSING:   0
-CORRUPTED: 0
-```
+The test starts 20 clients. Each client writes 2,000 unique keys, and a final connection reads every key back. The report counts successful, missing, and corrupted values.
 
-### Evaluating Server Implementations
-- **PooledKVServer** - Should complete in ~1 second with zero missing/corrupted data
-- **ThreadedKVServer** - May complete slower due to thread creation overhead (~2-3 seconds)
-- **KVServer (single-threaded)** - Will be very slow as only one client can execute at a time
+The utility is useful for comparing implementations, but it is not a formal benchmark: it has no warm-up, latency percentiles, or resource measurements.
 
-### Interpreting Results
-| Result | Meaning |
-|--------|---------|
-| `OK: 40000` | All operations succeeded |
-| `MISSING: X` | Concurrent writes lost data (likely due to non-thread-safe HashMap in basic implementations) |
-| `CORRUPTED: X` | Some keys stored with wrong values |
+## Design notes
 
-This test demonstrates the importance of proper thread safety and concurrent access handling in KV server implementations.
+- Data lives only in memory and is lost when the server stops.
+- The pooled and thread-per-client servers use `ConcurrentHashMap` because their handlers access one shared store.
+- The fixed pool limits active handlers, while accepted sockets can still wait in the executor's unbounded queue.
+- The protocol has no escaping, size limits, expiry, transactions, or access control.
 
-## 🔑 Key Learnings
+## License
 
-| Implementation              | Thread Model      | Best For                     |
-|----------------------------|-------------------|------------------------------|
-| EchoServer                 | Single thread     | Learning socket basics       |
-| KVServer                   | Single thread     | Simple sequential access     |
-| ThreadedKVServer           | New thread per client | Low-to-medium concurrent clients |
-| PooledKVServer             | Fixed thread pool | Production, high concurrency  |
-
-## 📝 License
-
-This project is educational and open for learning purposes.
+This repository does not currently declare a software license.
